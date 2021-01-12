@@ -183,7 +183,7 @@ class OPSSHCommand_cd(OPSSHCommand):
             return
 
         #FIXME: setting to unicode makes work on py2 but still breaks on py3. whats the best way?
-        path = unicode(path)
+        #path = unicode(path)
 
         if path[0] != '/':
             path = os.path.join(self.shell.pwd, path)
@@ -211,7 +211,7 @@ class OPSSHCommand_ls(OPSSHCommand):
 
         for path in paths:
             #FIXME: setting to unicode makes work on py2 but still breaks on py3. whats the best way?
-            path = unicode(path)
+            #path = unicode(path)
 
             if path[0] != '/':
                 path = os.path.join(self.shell.pwd, path)
@@ -250,7 +250,7 @@ class OPSSHCommand_cat(OPSSHCommand):
 
         for path in paths:
             #FIXME: setting to unicode makes work on py2 but still breaks on py3. whats the best way?
-            path = unicode(path)
+            #path = unicode(path)
 
             if path[0] != '/':
                 path = os.path.join(self.shell.pwd, path)
@@ -429,7 +429,7 @@ class OPSSHCommand_print(OPSSHCommand):
             return
 
         #FIXME: setting to unicode makes work on py2 but still breaks on py3. whats the best way?
-        path = unicode(path)
+        #path = unicode(path)
 
         if path[0] != '/':
             path = os.path.join(self.shell.pwd, path)

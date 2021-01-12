@@ -80,7 +80,7 @@ class OPSSHShell(recvline.HistoricRecvLine):
     def __init__(self, avatar, commands):
         self._OctoPrintSSH = avatar.conn.transport._OctoPrintSSH
         self.avatar = avatar
-        self.user = self._OctoPrintSSH._user_manager.find_user(avatar.username)
+        self.user = self._OctoPrintSSH._user_manager.find_user(avatar.username.decode())
         self.username = avatar.username
         self.pwd = '/'
         self.ps = '$'
@@ -157,6 +157,8 @@ class OPSSHShell(recvline.HistoricRecvLine):
         self.terminal.write("[{}]{} ".format(self.pwd, self.ps))
 
     def lineReceived(self, line):
+        line = line.decode()
+
         if self.running_command:
             try:
                 self.running_command.lineReceived(line)
@@ -192,7 +194,7 @@ class OPSSHShell(recvline.HistoricRecvLine):
         super(OPSSHShell, self).characterReceived(ch, moreCharactersComing)
 
     def runCommand(self, command, *args):
-        if self.commands.has_key(command):
+        if command in self.commands:
             try:
                 c = self.commands[command](self)
                 r = c.main(*args)
