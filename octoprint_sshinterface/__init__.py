@@ -96,7 +96,9 @@ class SSHInterface(octoprint.plugin.StartupPlugin,
 
     def _run_ssh(self):
         sshFactory = factory.SSHFactory()
-        sshFactory.portal = portal.Portal(opsshserver.OPSSHRealm(opsshcommands.available_commands))
+        sshFactory.services[b'ssh-userauth'] = opsshserver.OPSSHUserAuthServer
+
+        sshFactory.portal = opsshserver.OPSSHPortal(opsshserver.OPSSHRealm(opsshcommands.available_commands))
 
         sshFactory.portal.registerChecker(opsshserver.OPSSHCredentialChecker(self))
         sshFactory.portal.registerChecker(opsshserver.OPSSHPublicKeyChecker(self))

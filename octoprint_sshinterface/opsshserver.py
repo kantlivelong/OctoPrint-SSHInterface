@@ -5,12 +5,15 @@ __author__ = "Shawn Bruce <kantlivelong@gmail.com>"
 __license__ = "GNU Affero General Public License http://www.gnu.org/licenses/agpl.html"
 __copyright__ = "Copyright (C) 2020 Shawn Bruce - Released under terms of the AGPLv3 License"
 
-from twisted.conch import avatar, recvline
+from twisted.conch import avatar, recvline, interfaces
 from twisted.conch.interfaces import IConchUser, ISession
-from twisted.conch.ssh import factory, keys, session
+from twisted.conch.ssh import factory, keys, session, userauth
 from twisted.conch.insults import insults
+from twisted.cred.error import UnauthorizedLogin, UnhandledCredentials
 from twisted.cred import portal, checkers, credentials
 from twisted.internet import reactor, defer
+from twisted.conch.ssh.common import NS, getNS
+from twisted.python import failure, reflect
 from zope.interface import implementer
 from base64 import decodebytes
 import shlex
@@ -27,6 +30,61 @@ class OPSSHRealm(object):
         else:
             raise NotImplementedError("No supported interfaces found.")
 
+class OPSSHUserAuthServer(userauth.SSHUserAuthServer):
+    def auth_publickey(self, packet):
+        hasSig = ord(packet[0:1])
+        algName, blob, rest = getNS(packet[1:], 2)
+
+        try:
+            pubKey = keys.Key.fromString(blob)
+        except keys.BadKeyError:
+            error = "Unsupported key type {} or bad key".format(algName.decode("ascii"))
+            self._log.error(error)
+            return defer.fail(UnauthorizedLogin(error))
+
+        signature = hasSig and getNS(rest)[0] or None
+        if hasSig:
+            b = (
+                NS(self.transport.sessionID)
+                + bytes((MSG_USERAUTH_REQUEST,))
+                + NS(self.user)
+                + NS(self.nextService)
+                + NS(b"publickey")
+                + bytes((hasSig,))
+                + NS(pubKey.sshType())
+                + NS(blob)
+            )
+            c = credentials.SSHPrivateKey(self.user, algName, blob, b, signature)
+            return self.portal.login(c, None, self.transport, interfaces.IConchUser)
+        else:
+            c = credentials.SSHPrivateKey(self.user, algName, blob, None, None)
+            return self.portal.login(c, None, self.transport, interfaces.IConchUser).addErrback(
+                self._ebCheckKey, packet[1:]
+            )
+
+    def auth_password(self, packet):
+        password = getNS(packet[1:])[0]
+        c = credentials.UsernamePassword(self.user, password)
+        return self.portal.login(c, None, self.transport, interfaces.IConchUser).addErrback(
+            self._ebPassword
+        )
+
+class OPSSHPortal(portal.Portal):
+    def login(self, credentials, mind, transport, *interfaces):
+        for i in self.checkers:
+            if i.providedBy(credentials):
+                return defer.maybeDeferred(
+                    self.checkers[i].requestAvatarId, credentials, transport
+                ).addCallback(self.realm.requestAvatar, mind, *interfaces)
+        ifac = providedBy(credentials)
+        return defer.fail(
+            failure.Failure(
+                UnhandledCredentials(
+                    "No checker for %s" % ", ".join(map(reflect.qual, ifac))
+                )
+            )
+        )
+
 
 @implementer(checkers.ICredentialsChecker)
 class OPSSHCredentialChecker(object):
@@ -35,18 +93,20 @@ class OPSSHCredentialChecker(object):
     def __init__(self, plugin):
         self._OctoPrintSSH = plugin
 
-    def requestAvatarId(self, credentials):
+    def requestAvatarId(self, credentials, transport):
         username = credentials.username.decode()
         password = credentials.password.decode()
+
+        peer = transport.getPeer()
 
         if self._OctoPrintSSH._user_manager.check_password(username, password):
             user = self._OctoPrintSSH._user_manager.find_user(username)
             if user.is_active:
-                self._OctoPrintSSH._logger.info("Accepted password for {} from xxx port xxx".format(username))
+                self._OctoPrintSSH._logger.info("Accepted password for {} from {} port {}".format(username, peer.address.host, peer.address.port))
                 return defer.succeed(credentials.username)
 
-        self._OctoPrintSSH._logger.info("Failed password for {} from xxx port xxx".format(username))
-        return defer.fail(credError.UnauthorizedLogin("Bad password"))
+        self._OctoPrintSSH._logger.info("Failed password for {} from {} port {}".format(username, peer.address.host, peer.address.port))
+        return defer.fail(UnauthorizedLogin("Bad password"))
 
 @implementer(checkers.ICredentialsChecker)
 class OPSSHPublicKeyChecker(object):
@@ -55,8 +115,10 @@ class OPSSHPublicKeyChecker(object):
     def __init__(self, plugin):
         self._OctoPrintSSH = plugin
 
-    def requestAvatarId(self, credentials):
+    def requestAvatarId(self, credentials, transport):
         username = credentials.username.decode()
+
+        peer = transport.getPeer()
 
         user = self._OctoPrintSSH._user_manager.find_user(username)
         if user.is_active:
@@ -68,11 +130,13 @@ class OPSSHPublicKeyChecker(object):
 
                 try:
                     if decodebytes(key) == credentials.blob:
+                        self._OctoPrintSSH._logger.info("Accepted publickey for {} from {} port {}".format(username, peer.address.host, peer.address.port))
                         return defer.succeed(credentials.username)
                 except:
                     continue
 
-        return defer.fail(credError.UnauthorizedLogin("Invalid key"))
+        self._OctoPrintSSH._logger.info("Failed publickey for {} from {} port {}".format(username, peer.address.host, peer.address.port))
+        return defer.fail(UnauthorizedLogin("Invalid key"))
 
 @implementer(ISession)
 class OPSSHAvatar(avatar.ConchUser):
