@@ -58,17 +58,19 @@ class OPSSHPublicKeyChecker(object):
     def requestAvatarId(self, credentials):
         username = credentials.username.decode()
 
-        authorized_keys = self._OctoPrintSSH._user_manager.get_user_setting(username, ("plugins", "sshinterface", "authorized_keys"))
+        user = self._OctoPrintSSH._user_manager.find_user(username)
+        if user.is_active:
+            authorized_keys = self._OctoPrintSSH._user_manager.get_user_setting(username, ("plugins", "sshinterface", "authorized_keys"))
 
-        for line in authorized_keys:
-            key = line.split(' ')[1]
-            key = bytes(key, 'ascii')
+            for line in authorized_keys:
+                key = line.split(' ')[1]
+                key = bytes(key, 'ascii')
 
-            try:
-                if decodebytes(key) == credentials.blob:
-                    return defer.succeed(credentials.username)
-            except:
-                continue
+                try:
+                    if decodebytes(key) == credentials.blob:
+                        return defer.succeed(credentials.username)
+                except:
+                    continue
 
         return defer.fail(credError.UnauthorizedLogin("Invalid key"))
 
