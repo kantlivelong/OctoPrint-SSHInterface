@@ -135,12 +135,13 @@ class SSHInterface(octoprint.plugin.StartupPlugin,
 
     def get_template_configs(self):
         return [
-            dict(type="settings", custom_bindings=False)
+            dict(type="settings", custom_bindings=True),
+            dict(type="usersettings", custom_bindings=True)
         ]
 
     def get_assets(self):
         return {
-            "js": ["js/ssh.js"]
+            "js": ["js/sshinterface.js"]
         }
 
     def get_update_information(self):
