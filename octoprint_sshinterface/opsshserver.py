@@ -12,6 +12,7 @@ from twisted.conch.insults import insults
 from twisted.cred import portal, checkers, credentials
 from twisted.internet import reactor, defer
 from zope.interface import implementer
+from base64 import decodebytes
 import shlex
 
 
@@ -47,6 +48,29 @@ class OPSSHCredentialChecker(object):
         self._OctoPrintSSH._logger.info("Failed password for {} from xxx port xxx".format(username))
         return defer.fail(credError.UnauthorizedLogin("Bad password"))
 
+@implementer(checkers.ICredentialsChecker)
+class OPSSHPublicKeyChecker(object):
+    credentialInterfaces = (credentials.ISSHPrivateKey,)
+
+    def __init__(self, plugin):
+        self._OctoPrintSSH = plugin
+
+    def requestAvatarId(self, credentials):
+        username = credentials.username.decode()
+
+        authorized_keys = self._OctoPrintSSH._user_manager.get_user_setting(username, ("plugins", "sshinterface", "authorized_keys"))
+
+        for line in authorized_keys:
+            key = line.split(' ')[1]
+            key = bytes(key, 'ascii')
+
+            try:
+                if decodebytes(key) == credentials.blob:
+                    return defer.succeed(credentials.username)
+            except:
+                continue
+
+        return defer.fail(credError.UnauthorizedLogin("Invalid key"))
 
 @implementer(ISession)
 class OPSSHAvatar(avatar.ConchUser):

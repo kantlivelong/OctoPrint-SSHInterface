@@ -99,6 +99,7 @@ class SSHInterface(octoprint.plugin.StartupPlugin,
         sshFactory.portal = portal.Portal(opsshserver.OPSSHRealm(opsshcommands.available_commands))
 
         sshFactory.portal.registerChecker(opsshserver.OPSSHCredentialChecker(self))
+        sshFactory.portal.registerChecker(opsshserver.OPSSHPublicKeyChecker(self))
 
         if not os.path.isfile(self.private_key_file) and not os.path.isfile(self.public_key_file):
             self._create_ssh_keypair(2048)
